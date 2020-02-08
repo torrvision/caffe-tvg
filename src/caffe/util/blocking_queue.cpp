@@ -93,4 +93,13 @@ template class BlockingQueue<shared_ptr<DataReader::QueuePair> >;
 template class BlockingQueue<P2PSync<float>*>;
 template class BlockingQueue<P2PSync<double>*>;
 
+template class BlockingQueue<BatchWithIndex<float>*>;
+template class BlockingQueue<BatchWithIndex<double>*>;
+
+template class BlockingQueue<BatchWithClassLabel<float>*>;
+template class BlockingQueue<BatchWithClassLabel<double>*>;
+
+template class BlockingQueue<BatchIndexDetection<float>*>;
+template class BlockingQueue<BatchIndexDetection<double>*>;
+
 }  // namespace caffe

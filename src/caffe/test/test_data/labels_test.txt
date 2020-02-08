@@ -1,0 +1,10 @@
+sbd/SegmentationClassCV/2008_000008.png
+sbd/SegmentationClassCV/2008_000015.png
+sbd/SegmentationClassCV/2008_000019.png
+sbd/SegmentationClassCV/2008_000023.png
+sbd/SegmentationClassCV/2008_000028.png
+sbd/SegmentationClassCV/2008_000033.png
+sbd/SegmentationClassCV/2008_000036.png
+sbd/SegmentationClassCV/2008_000041.png
+sbd/SegmentationClassCV/2008_000045.png
+sbd/SegmentationClassCV/2008_000053.png

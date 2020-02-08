@@ -93,3 +93,11 @@ LOCK
 LOG*
 CURRENT
 MANIFEST-*
+
+#Data created from my test cases
+src/caffe/test/test_data/shape_term/*.csv
+src/caffe/test/test_data/shape_term/*.png
+src/caffe/test/test_data/shape_term/*.txt
+
+#VS Code
+.vscode

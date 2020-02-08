@@ -1,0 +1,34 @@
+force_backward: true
+layer {
+  name: "unary"
+  type: "Input"
+  top: "unary"
+  input_param {
+    shape {
+      dim: 31
+      dim: 21
+      dim: 66
+      dim: 66
+    }
+  }
+}
+layer {
+  name: "detections"
+  type: "Input"
+  top: "detections"
+  input_param {
+    shape {
+      dim: 1
+      dim: 30
+      dim: 1
+      dim: 6
+    }
+  }
+}
+layer {
+  name: "channel_select"
+  type: "ChannelSelect"
+  bottom: "unary"
+  bottom: "detections"
+  top: "selected_channels"
+}

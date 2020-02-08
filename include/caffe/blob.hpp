@@ -216,6 +216,10 @@ class Blob {
     return diff_;
   }
 
+  inline int capacity() const {
+    return capacity_;
+  }
+
   const Dtype* cpu_data() const;
   void set_cpu_data(Dtype* data);
   const int* gpu_shape() const;

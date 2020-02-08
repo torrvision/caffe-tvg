@@ -109,6 +109,9 @@ class Solver {
   void DisplayOutputBlobs(const int net_id);
   void UpdateSmoothedLoss(Dtype loss, int start_iter, int average_loss);
 
+  Dtype UpdateSmoothedGradient(int start_iter, int average_loss, Dtype gradNorm, vector<Dtype>& gradientNorms, Dtype smoothed_gradientNorm);
+  Dtype GetGradNorm(void);
+
   SolverParameter param_;
   int iter_;
   int current_step_;

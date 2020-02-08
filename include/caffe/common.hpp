@@ -163,6 +163,11 @@ class Caffe {
   inline static void set_solver_count(int val) { Get().solver_count_ = val; }
   inline static bool root_solver() { return Get().root_solver_; }
   inline static void set_root_solver(bool val) { Get().root_solver_ = val; }
+  // Current iteration and total iteration info
+  inline static int get_cur_iter() { return Get().cur_iter_; }
+  inline static void set_cur_iter(int val) { Get().cur_iter_ = val; }
+  inline static int get_max_iter() { return Get().max_iter_; }
+  inline static void set_max_iter(int val) { Get().max_iter_ = val; }
 
  protected:
 #ifndef CPU_ONLY
@@ -174,6 +179,8 @@ class Caffe {
   Brew mode_;
   int solver_count_;
   bool root_solver_;
+  int cur_iter_;
+  int max_iter_;
 
  private:
   // The private constructor to avoid duplicate instantiation.

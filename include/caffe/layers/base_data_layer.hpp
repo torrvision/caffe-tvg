@@ -52,6 +52,24 @@ class Batch {
 };
 
 template <typename Dtype>
+class BatchWithIndex {
+  public:
+    Blob<Dtype> data_, label_, index_;
+};
+
+template <typename Dtype>
+class BatchIndexDetection {
+public:
+    Blob<Dtype> data_, label_, index_, detection_;
+};
+
+template <typename Dtype>
+class BatchWithClassLabel {
+    public:
+    Blob<Dtype> data_, label_, class_label_;
+};
+
+template <typename Dtype>
 class BasePrefetchingDataLayer :
     public BaseDataLayer<Dtype>, public InternalThread {
  public:
@@ -79,6 +97,102 @@ class BasePrefetchingDataLayer :
   BlockingQueue<Batch<Dtype>*> prefetch_full_;
 
   Blob<Dtype> transformed_data_;
+};
+
+
+template <typename Dtype>
+class BasePrefetchingDataIndexLayer :
+        public BaseDataLayer<Dtype>, public InternalThread {
+public:
+    explicit BasePrefetchingDataIndexLayer(const LayerParameter& param);
+    // LayerSetUp: implements common data layer setup functionality, and calls
+    // DataLayerSetUp to do special data layer setup for individual layer types.
+    // This method may not be overridden.
+    void LayerSetUp(const vector<Blob<Dtype>*>& bottom,
+                    const vector<Blob<Dtype>*>& top);
+
+    virtual void Forward_cpu(const vector<Blob<Dtype>*>& bottom,
+                             const vector<Blob<Dtype>*>& top);
+    virtual void Forward_gpu(const vector<Blob<Dtype>*>& bottom,
+                             const vector<Blob<Dtype>*>& top);
+
+    // Prefetches batches (asynchronously if to GPU memory)
+    static const int PREFETCH_COUNT = 3;
+
+protected:
+    virtual void InternalThreadEntry();
+    virtual void load_batch(BatchWithIndex<Dtype>* batch) = 0;
+
+    BatchWithIndex<Dtype> prefetch_[PREFETCH_COUNT];
+    BlockingQueue<BatchWithIndex<Dtype>*> prefetch_free_;
+    BlockingQueue<BatchWithIndex<Dtype>*> prefetch_full_;
+
+    Blob<Dtype> transformed_data_;
+    bool output_index_;
+};
+
+
+template <typename Dtype>
+class BasePrefetchingDataIndexDetectionLayer :
+        public BaseDataLayer<Dtype>, public InternalThread {
+public:
+    explicit BasePrefetchingDataIndexDetectionLayer(const LayerParameter& param);
+    // LayerSetUp: implements common data layer setup functionality, and calls
+    // DataLayerSetUp to do special data layer setup for individual layer types.
+    // This method may not be overridden.
+    void LayerSetUp(const vector<Blob<Dtype>*>& bottom,
+                    const vector<Blob<Dtype>*>& top);
+
+    virtual void Forward_cpu(const vector<Blob<Dtype>*>& bottom,
+                             const vector<Blob<Dtype>*>& top);
+    virtual void Forward_gpu(const vector<Blob<Dtype>*>& bottom,
+                             const vector<Blob<Dtype>*>& top);
+
+    // Prefetches batches (asynchronously if to GPU memory)
+    static const int PREFETCH_COUNT = 3;
+
+protected:
+    virtual void InternalThreadEntry();
+    virtual void load_batch(BatchIndexDetection<Dtype>* batch) = 0;
+
+    BatchIndexDetection<Dtype> prefetch_[PREFETCH_COUNT];
+    BlockingQueue<BatchIndexDetection<Dtype>*> prefetch_free_;
+    BlockingQueue<BatchIndexDetection<Dtype>*> prefetch_full_;
+
+    Blob<Dtype> transformed_data_;
+    bool output_index_;
+    bool output_detection_;
+};
+
+template <typename Dtype>
+class BasePrefetchingDataClassLayer :
+        public BaseDataLayer<Dtype>, public InternalThread {
+public:
+    explicit BasePrefetchingDataClassLayer(const LayerParameter& param);
+    // LayerSetUp: implements common data layer setup functionality, and calls
+    // DataLayerSetUp to do special data layer setup for individual layer types.
+    // This method may not be overridden.
+    void LayerSetUp(const vector<Blob<Dtype>*>& bottom,
+                    const vector<Blob<Dtype>*>& top);
+
+    virtual void Forward_cpu(const vector<Blob<Dtype>*>& bottom,
+                             const vector<Blob<Dtype>*>& top);
+    virtual void Forward_gpu(const vector<Blob<Dtype>*>& bottom,
+                             const vector<Blob<Dtype>*>& top);
+
+    // Prefetches batches (asynchronously if to GPU memory)
+    static const int PREFETCH_COUNT = 3;
+
+protected:
+    virtual void InternalThreadEntry();
+    virtual void load_batch(BatchWithClassLabel<Dtype>* batch) = 0;
+
+    BatchWithClassLabel<Dtype> prefetch_[PREFETCH_COUNT];
+    BlockingQueue<BatchWithClassLabel<Dtype>*> prefetch_free_;
+    BlockingQueue<BatchWithClassLabel<Dtype>*> prefetch_full_;
+
+    Blob<Dtype> transformed_data_;
+    bool output_class_label_;
 };
 
 }  // namespace caffe

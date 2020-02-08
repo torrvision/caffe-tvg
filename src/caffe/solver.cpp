@@ -197,8 +197,12 @@ void Solver<Dtype>::Step(int iters) {
   int average_loss = this->param_.average_loss();
   losses_.clear();
   smoothed_loss_ = 0;
+  vector<Dtype> gradientNorms;
+  Dtype smoothed_gradientNorm = 0;
 
   while (iter_ < stop_iter) {
+    // update the current iteration number
+    Caffe::set_cur_iter(iter_);
     // zero-init the params
     net_->ClearParamDiffs();
     if (param_.test_interval() && iter_ % param_.test_interval() == 0
@@ -218,12 +222,15 @@ void Solver<Dtype>::Step(int iters) {
     net_->set_debug_info(display && param_.debug_info());
     // accumulate the loss and gradient
     Dtype loss = 0;
+    Dtype gradNorm = 0;
     for (int i = 0; i < param_.iter_size(); ++i) {
       loss += net_->ForwardBackward();
     }
     loss /= param_.iter_size();
+    gradNorm = GetGradNorm();
     // average the loss across iterations for smoothed reporting
     UpdateSmoothedLoss(loss, start_iter, average_loss);
+    smoothed_gradientNorm = UpdateSmoothedGradient(start_iter, average_loss, gradNorm, gradientNorms, smoothed_gradientNorm);
     if (display) {
       LOG_IF(INFO, Caffe::root_solver()) << "Iteration " << iter_
           << ", loss = " << smoothed_loss_;
@@ -245,6 +252,7 @@ void Solver<Dtype>::Step(int iters) {
               << score_index++ << ": " << output_name << " = "
               << result_vec[k] << loss_msg_stream.str();
         }
+        LOG_IF(INFO, Caffe::root_solver()) << "Gradient norm = " << smoothed_gradientNorm;
       }
     }
     for (int i = 0; i < callbacks_.size(); ++i) {
@@ -287,6 +295,8 @@ void Solver<Dtype>::Solve(const char* resume_file) {
     Restore(resume_file);
   }
 
+  // Set the number of total iterations.
+  Caffe::set_max_iter(param_.max_iter());
   // For a network that is trained by the solver, no bottom or top vecs
   // should be given, and we will just provide dummy vecs.
   int start_iter = iter_;
@@ -490,6 +500,35 @@ void Solver<Dtype>::UpdateSmoothedLoss(Dtype loss, int start_iter,
     smoothed_loss_ += (loss - losses_[idx]) / average_loss;
     losses_[idx] = loss;
   }
+}
+
+template <typename Dtype>
+Dtype Solver<Dtype>::UpdateSmoothedGradient(int start_iter, int average_loss, Dtype gradNorm, vector<Dtype>& gradientNorms, Dtype smoothed_gradientNorm) {
+
+  if (gradientNorms.size() < average_loss) {
+    gradientNorms.push_back(gradNorm);
+    int size = gradientNorms.size();
+    smoothed_gradientNorm = (smoothed_gradientNorm * (size - 1) + gradNorm) / size;
+  } else {
+    int idx = (iter_ - start_iter) % average_loss;
+    smoothed_gradientNorm += (gradNorm - gradientNorms[idx]) / average_loss;
+    gradientNorms[idx] = gradNorm;
+  }
+
+  return smoothed_gradientNorm;
+}
+
+template<typename Dtype>
+Dtype Solver<Dtype>::GetGradNorm(void) {
+  const vector<shared_ptr<Blob<Dtype> > >& net_params = this->net_->params();
+  Dtype sumsq_diff = 0;
+  for (int i = 0; i < net_params.size(); ++i) {
+      if (this->net_->param_owners()[i] < 0) {
+          sumsq_diff += net_params[i]->sumsq_diff();
+        }
+    }
+  const Dtype l2norm_diff = std::sqrt(sumsq_diff);
+  return l2norm_diff;
 }
 
 INSTANTIATE_CLASS(Solver);

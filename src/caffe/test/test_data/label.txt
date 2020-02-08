@@ -1,0 +1,11 @@
+voc2012/SegmentationClassCV/2007_000033.png
+voc2012/SegmentationClassCV/2007_000042.png
+voc2012/SegmentationClassCV/2007_000061.png
+voc2012/SegmentationClassCV/2007_000123.png
+voc2012/SegmentationClassCV/2007_000129.png
+voc2012/SegmentationClassCV/2007_000175.png
+voc2012/SegmentationClassCV/2007_000187.png
+voc2012/SegmentationClassCV/2011_003030.png
+voc2012/SegmentationClassCV/2010_001656.png
+voc2012/SegmentationClassCV/2009_002202.png
+voc2012/SegmentationClassCV/2008_004910.png

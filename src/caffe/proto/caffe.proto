@@ -59,6 +59,7 @@ message FillerParameter {
     AVERAGE = 2;
   }
   optional VarianceNorm variance_norm = 8 [default = FAN_IN];
+  optional int32 num_groups = 9; // for identity filler
 }
 
 message NetParameter {
@@ -306,7 +307,7 @@ message ParamSpec {
 // NOTE
 // Update the next available ID when you add a new LayerParameter field.
 //
-// LayerParameter next available layer-specific ID: 146 (last added: parameter_param)
+// LayerParameter next available layer-specific ID: 147 (last added: bn_param)
 message LayerParameter {
   optional string name = 1; // the layer name
   optional string type = 2; // the layer type
@@ -361,6 +362,8 @@ message LayerParameter {
   optional AccuracyParameter accuracy_param = 102;
   optional ArgMaxParameter argmax_param = 103;
   optional BatchNormParameter batch_norm_param = 139;
+  optional BoxAnnotatorOHEMParameter box_annotator_ohem_param = 150;
+  optional BNParameter bn_param = 146;
   optional BiasParameter bias_param = 141;
   optional ConcatParameter concat_param = 104;
   optional ContrastiveLossParameter contrastive_loss_param = 105;
@@ -389,7 +392,9 @@ message LayerParameter {
   optional PoolingParameter pooling_param = 121;
   optional PowerParameter power_param = 122;
   optional PReLUParameter prelu_param = 131;
+  optional PSROIPoolingParameter psroi_pooling_param = 149;
   optional PythonParameter python_param = 130;
+  optional RecurrentParameter recurrent_param = 14600; // This is 146 in the original Caffe. Oops. Now this code will no longer be compatible with the original Caffe :-(
   optional ReductionParameter reduction_param = 136;
   optional ReLUParameter relu_param = 123;
   optional ReshapeParameter reshape_param = 133;
@@ -402,6 +407,33 @@ message LayerParameter {
   optional ThresholdParameter threshold_param = 128;
   optional TileParameter tile_param = 138;
   optional WindowDataParameter window_data_param = 129;
+  optional MILDataParameter mil_data_param = 0x004d4944; //"MID"
+  optional MILParameter mil_param = 0x004d494c; //"MIL"
+
+  // Faster-RCNN layers. From Ross Girschick's Py-Faster-RCNN. (February 2016)
+  optional ROIPoolingParameter roi_pooling_param = 8266711;
+  optional SmoothL1LossParameter smooth_l1_loss_param = 8266712;		
+
+  // TVG layers
+  optional IOUAccuracyParameter iou_accuracy_param = 1000;
+  optional MultiStageMeanfieldParameter multi_stage_meanfield_param = 1001;
+  optional InstanceIDParameter instance_id_param = 1002;
+  optional TransferParameter transfer_param = 1003;
+  optional BoxTermParameter box_term_param = 1004;
+  optional ShapeTermParameter shape_term_param = 1005;
+
+  // DeepLab layers
+  optional InterpParameter interp_param = 5043;	
+
+  // Dilated Convolution caffe layers
+  optional ImageLabelDataParameter image_label_data_param = 2000;
+
+  // MNC layers
+  optional ROIWarpingParameter roi_warping_param = 11870;
+  optional MaskResizeParameter mask_resize_param = 11890;
+
+  // Group normalisation layer
+  optional GNParameter gn_param = 15000;
 }
 
 // Message that stores parameters used to apply transformation
@@ -425,6 +457,17 @@ message TransformationParameter {
   optional bool force_color = 6 [default = false];
   // Force the decoded image to have 1 color channels.
   optional bool force_gray = 7 [default = false];
+
+  // optional InvalidDetectionMode
+  // Some image transformations can cause detections to disappear from the image.
+  // For example, scaling an image up and then cropping it.
+  enum InvalidDetectionMode {
+    REMOVE = 0;
+    ZERO_OUT = 1;
+  }
+
+  optional InvalidDetectionMode invalid_detection_mode = 13 [default = ZERO_OUT];
+
 }
 
 // Message that stores parameters shared by loss layers
@@ -433,7 +476,7 @@ message LossParameter {
   optional int32 ignore_label = 1;
   // How to normalize the loss for loss layers that aggregate across batches,
   // spatial dimensions, or other dimensions.  Currently only implemented in
-  // SoftmaxWithLoss layer.
+  // SoftmaxWithLoss and SigmoidCrossEntropyLoss layers.
   enum NormalizationMode {
     // Divide by the number of examples in the batch times spatial dimensions.
     // Outputs that receive the ignore label will NOT be ignored in computing
@@ -444,15 +487,27 @@ message LossParameter {
     VALID = 1;
     // Divide by the batch size.
     BATCH_SIZE = 2;
+    // Divide by pre-fixed normalizer
+    PRE_FIXED = 3;
     // Do not normalize the loss.
-    NONE = 3;
+    NONE = 4;
   }
+  // For historical reasons, the default normalization for
+  // SigmoidCrossEntropyLoss is BATCH_SIZE and *not* VALID.
   optional NormalizationMode normalization = 3 [default = VALID];
   // Deprecated.  Ignored if normalization is specified.  If normalization
   // is not specified, then setting this to false will be equivalent to
   // normalization = BATCH_SIZE to be consistent with previous behavior.
   optional bool normalize = 2;
-}
+  //pre-fixed normalizer
+  optional float pre_fixed_normalizer = 4 [default = 1];
+
+  // Additional
+  // Do not compute the loss for points with a probability higher than "probability_thresh"
+  optional bool has_probability_thresh = 5 [default = false];
+  optional float probability_threshold = 6 [default = 1];
+  optional bool use_ohem = 7 [default = false];
+  optional int32 ohem_n = 8 [default = 512];}
 
 // Messages that store parameters used by individual layer types follow, in
 // alphabetical order.
@@ -506,6 +561,42 @@ message BatchNormParameter {
   // Small value to add to the variance estimate so that we don't divide by
   // zero.
   optional float eps = 3 [default = 1e-5];
+}
+
+message BoxAnnotatorOHEMParameter {
+  required uint32 roi_per_img = 1; // number of rois for training
+  optional int32 ignore_label = 2 [default = -1]; // ignore_label in scoring
+}
+
+message BNParameter {
+  optional FillerParameter slope_filler = 1;
+  optional FillerParameter bias_filler = 2;
+  optional float momentum = 3 [default = 0.9];
+  optional float eps = 4 [default = 1e-5];
+  // If true, will use the moving average mean and std for training and test.
+  // Will override the lr_param and freeze all the parameters.
+  // Make sure to initialize the layer properly with pretrained parameters.
+  optional bool frozen = 5 [default = false];
+  enum Engine {
+    DEFAULT = 0;
+    CAFFE = 1;
+    CUDNN = 2;
+  }
+  optional Engine engine = 6 [default = DEFAULT];
+  optional bool use_global_stats = 7 [default = false];
+  optional bool is_gradient_check = 8 [default = false];
+  optional bool clip_r = 9 [default = false];
+  optional bool clip_d = 10 [default = false];
+  optional float d_max = 11 [default = 1.];
+  optional float r_max = 12 [default = 0.]; 
+}
+
+message GNParameter {
+  optional FillerParameter slope_filler = 1;
+  optional FillerParameter bias_filler = 2;
+  optional float eps = 3 [default = 1e-5];
+  optional uint32 num_groups = 4;
+  optional uint32 channels_per_group = 5;
 }
 
 message BiasParameter {
@@ -905,6 +996,10 @@ message PoolingParameter {
   // If global_pooling then it will pool over the size of the bottom by doing
   // kernel_h = bottom->height and kernel_w = bottom->width
   optional bool global_pooling = 12 [default = false];
+  // If real_pool_size = true, at the edges where the pooling kernel partially
+  // falls outside the bottom blob, it will use the size of overlapping
+  // pooling kernel as the pool_size (only meaningful for AVERAGE pooling)
+  optional bool real_pool_size = 13 [default = false];
 }
 
 message PowerParameter {
@@ -913,6 +1008,12 @@ message PowerParameter {
   optional float scale = 2 [default = 1.0];
   optional float shift = 3 [default = 0.0];
 }
+
+message PSROIPoolingParameter {
+   required float spatial_scale = 1; 
+   required int32 output_dim = 2; // output channel number
+   required int32 group_size = 3; // number of groups to encode position-sensitive score maps
+ }
 
 message PythonParameter {
   optional string module = 1;
@@ -926,6 +1027,25 @@ message PythonParameter {
   // If true, each worker solver sequentially run forward from this layer.
   // This value should be set true if you are using it as a data layer.
   optional bool share_in_parallel = 4 [default = false];
+}
+
+// Message that stores parameters used by RecurrentLayer
+message RecurrentParameter {
+  // The dimension of the output (and usually hidden state) representation --
+  // must be explicitly set to non-zero.
+  optional uint32 num_output = 1 [default = 0];
+
+  optional FillerParameter weight_filler = 2; // The filler for the weight
+  optional FillerParameter bias_filler = 3; // The filler for the bias
+
+  // Whether to enable displaying debug_info in the unrolled recurrent net.
+  optional bool debug_info = 4 [default = false];
+
+  // Whether to add as additional inputs (bottoms) the initial hidden state
+  // blobs, and add as additional outputs (tops) the final timestep hidden state
+  // blobs.  The number of additional bottom/top blobs required depends on the
+  // recurrent architecture -- e.g., 1 for RNNs, 2 for LSTMs.
+  optional bool expose_hidden = 5 [default = false];
 }
 
 // Message that stores parameters used by ReductionLayer
@@ -1037,6 +1157,17 @@ message ReshapeParameter {
   optional int32 num_axes = 3 [default = -1];
 }
 
+// Message that stores parameters used by ROIPoolingLayer
+message ROIPoolingParameter {
+  // Pad, kernel size, and stride are all given as a single value for equal
+  // dimensions in height and width or as Y, X pairs.
+  optional uint32 pooled_h = 1 [default = 0]; // The pooled output height
+  optional uint32 pooled_w = 2 [default = 0]; // The pooled output width
+  // Multiplicative spatial scale factor to translate ROI coords from their
+  // input scale to the scale used when pooling
+  optional float spatial_scale = 3 [default = 1];
+}
+
 message ScaleParameter {
   // The first axis of bottom[0] (the first input Blob) along which to apply
   // bottom[1] (the second input Blob).  May be negative to index from the end
@@ -1081,6 +1212,13 @@ message SigmoidParameter {
     CUDNN = 2;
   }
   optional Engine engine = 1 [default = DEFAULT];
+}
+
+message SmoothL1LossParameter {
+  // SmoothL1Loss(x) =
+  //   0.5 * (sigma * x) ** 2    -- if x < 1.0 / sigma / sigma
+  //   |x| - 0.5 / sigma / sigma -- otherwise
+  optional float sigma = 1 [default = 1];
 }
 
 message SliceParameter {
@@ -1132,6 +1270,16 @@ message ThresholdParameter {
   optional float threshold = 1 [default = 0]; // Strictly positive values
 }
 
+// Message that stores parameters used by MILLayer
+message MILParameter {
+  enum MILType {
+    MAX = 0;
+    NOR = 1;
+  }
+  optional MILType type = 1 [default = MAX]; // The MIL method
+}
+
+
 message WindowDataParameter {
   // Specify the data source.
   optional string source = 1;
@@ -1164,6 +1312,37 @@ message WindowDataParameter {
   // append root_folder to locate images
   optional string root_folder = 13 [default = ""];
 }
+
+message MILDataParameter {
+  // Specify the data source.
+  optional string source = 1;
+  
+  // Number of scales for each image
+  optional uint32 num_scales = 2 [default = 1];
+  
+  // Side length ratio between neighbouring scales
+  optional float scale_factor = 6 [default = 1];
+  
+  // Number of channels in the image
+  optional uint32 channels = 4 [default = 3];
+  
+  // Specify the number of images per batch
+  optional uint32 images_per_batch = 3;
+  // Specify the number of classes
+  optional uint32 n_classes = 5;
+  // specify the box_dir and label_dir
+  optional string label_file = 7;
+  
+  // Root directory which contains all the images
+  optional string root_dir = 11;
+  // Extention for the file
+  optional string ext = 12;
+  
+  // To randomize or not
+  optional bool randomize = 13 [default = true];
+}
+
+
 
 message SPPParameter {
   enum PoolMethod {
@@ -1376,4 +1555,260 @@ message PReLUParameter {
   optional FillerParameter filler = 1;
   // Whether or not slope paramters are shared across channels.
   optional bool channel_shared = 2 [default = false];
+}
+
+//
+// Parameters added by TVG
+//
+
+message IOUAccuracyParameter {
+
+  // If specified, ignore instances with the given label.
+  optional int32 ignore_label = 1 [default = 255];
+
+  // If true, normalize each batch across all instances (including spatial
+  // dimesions, but not ignored instances); else, divide by batch size only.
+  //
+  // This normalises the softmax loss by the number of images.
+  // If it is set to false, the softmax loss is divided by the total number of pixels
+  // This has nothing to do with the actual IoU though.
+  optional bool normalize = 2 [default = true];
+
+  optional uint32 test_iterations = 3;
+
+  // Manually set the number of classes to evaluate over.
+  // By default, the number of classes is the number of channels when setting the IOU layer up
+  // However, in the case that there is a dynamic number of channels (ie instances), we need to set this up manually
+  optional uint32 num_classes = 4 [default = 0]; 
+}
+
+// Message that stores parameters used by MultiStageMeanfieldLayer
+message MultiStageMeanfieldParameter {
+
+  enum Mode {
+    POTTS = 0;
+  }
+  optional Mode compatibility_mode = 1; // Unused
+  optional float threshold = 2; // Unused
+
+  required float theta_alpha = 3 [default = 10.]; // If it is required, then what is the point of a default parameter?
+  required float theta_beta = 4 [default = 10.];
+  required float theta_gamma = 5 [default = 10.];
+
+  required uint32 num_iterations = 6 [default = 1];
+
+  optional float spatial_filter_weight = 7 [default = 0]; // Unused
+  optional float bilateral_filter_weight = 8 [default = 10]; // Unused
+
+  optional float forced_spatial_filter_weight = 9 [default = 0]; // Unused
+  optional float forced_bilateral_filter_weight = 10 [default = 0]; // Unused
+
+  optional bool detection_potentials_enabled = 11 [default = false];
+  optional string detection_dat_input_dir = 12 [default = ""];
+  optional uint32 train_dataset_size = 13 [default = 0];
+  optional bool detection_dat_check_enabled = 14 [default = false];
+  optional float detection_potentials_max_score = 15 [default = 0.0];
+  optional float detection_potentials_epsilon = 16 [default = 0.0];
+  optional string detection_x_weights_str = 17 [default = ""];
+  optional string detection_y_weights_str = 18 [default = ""];
+
+  optional string spatial_filter_weights_str = 19 [default = ""];
+  optional string bilateral_filter_weights_str = 20 [default = ""];
+
+  optional bool ho_potentials_enabled = 21 [default = false];
+  optional string ho_dat_input_dir = 22 [default = ""];
+  optional string ho_w_param_str = 25 [default = ""];
+  optional uint32 ho_num_layers = 26 [default = 4];
+  optional string ho_w2_param_str = 27 [default = ""];
+  optional bool ho_w2_enabled = 28 [default = false];
+
+  optional bool force_cpu = 29 [default = false]; // Force CPU meanfield to be used, even though the GPU is available
+
+  optional bool is_no_class_weights = 30 [default = false]; // If enabled, means that we use a single weight for bilaterral and spatial filter. Ie not class specific
+}
+
+message InstanceIDParameter {
+
+  required string detection_box_input_dir = 1 [default = ""];
+  required string detection_pixel_input_dir = 2 [default = ""];
+
+  optional bool is_no_rescore_baseline = 3 [default = false];
+
+  optional bool is_background_det = 4 [default = false];
+  optional float background_det_score = 5 [default = 0.7311]; // exp(1) / exp(1) + exp(0)
+}
+
+message BoxTermParameter {
+
+  required string detection_box_input_dir = 1 [default = ""];
+  required string detection_pixel_input_dir = 2 [default = ""];
+
+  optional bool is_no_rescore_baseline = 3 [default = false];
+
+  optional bool is_background_det = 4 [default = false];
+  optional float background_det_score = 5 [default = 0.7311]; // exp(1) / exp(1) + exp(0)
+
+  optional bool force_cpu = 6 [default = false]; // Force layer to run on CPU, even though GPU is available
+}
+
+message TransferParameter {
+  optional string detection_box_input_dir = 1 [default = ""];
+  optional bool no_detections = 2 [default = false];
+  optional bool copy_bg = 3 [default = true];
+
+  optional bool force_cpu = 4 [default = false]; // Force layer to run on CPU, even though GPU is available
+}
+
+message ShapeTermParameter {
+  required string detection_box_input_dir = 1;
+
+  optional bool init_from_files = 2 [default = false];
+  optional string init_prefix = 3 [default = ""];
+  optional uint32 num_files = 4 [default = 0];
+}
+
+
+//
+// DeepLab messages
+//
+message InterpParameter {
+  optional int32 height = 1 [default = 0]; // Height of output
+  optional int32 width = 2 [default = 0]; // Width of output
+  optional int32 zoom_factor = 3 [default = 1]; // zoom factor
+  optional int32 shrink_factor = 4 [default = 1]; // shrink factor
+  optional int32 pad_beg = 5 [default = 0]; // padding at begin of input
+  optional int32 pad_end = 6 [default = 0]; // padding at end of input
+}
+
+//
+// Messages from Caffe Dilated Convolution
+//
+message Slice {
+  repeated uint32 dim = 1;
+  repeated uint32 stride = 2;
+  repeated uint32 offset = 3;
+}
+
+message ImageLabelDataParameter {
+  // Specify the data source.
+  optional string image_list_path = 1;
+  optional string label_list_path = 2;
+  // Specify the batch size.
+  optional uint32 batch_size = 3 [default = 1];
+  // The rand_skip variable is for the data layer to skip a few data points
+  // to avoid all asynchronous sgd clients to start at the same point. The skip
+  // point would be set as rand_skip * rand(0,1). Note that rand_skip should not
+  // be larger than the number of keys in the database.
+  optional uint32 rand_skip = 4 [default = 0];
+  // Whether or not ImageLayer should shuffle the list of files at every epoch.
+  optional bool shuffle = 5 [default = false];
+
+  // Whether random sample image scales
+  optional bool rand_scale = 6 [default = false];
+  optional float min_scale = 7  [default = 1];
+  optional float max_scale = 8  [default = 1];
+
+  optional string data_dir = 9 [default = ""];
+
+  optional Slice label_slice = 10;
+
+  optional string image_dir = 11 [default = ""];
+  optional string label_dir = 12 [default = ""];
+
+  enum Padding {
+    ZERO = 0;
+    REFLECT = 1;
+  }
+
+  optional Padding padding = 13 [default = REFLECT];
+
+  optional bool hsv_noise = 14 [default = false];
+  optional uint32 h_noise = 15 [default = 0];
+  optional uint32 s_noise = 16 [default = 0];
+  optional uint32 v_noise = 17 [default = 0];
+
+  optional bool pad_centre = 18 [default = true];
+
+  optional bool random_rotate = 19 [default = false];
+  optional int32 max_rotation_angle = 20 [default = 0];
+  optional int32 min_rotation_angle = 21 [default = 0];  // if (temp >= 360 || temp <= -360 ){ min_rotation_angle_ = max_rotation_angle_ * -1; }
+
+  optional bool random_gaussian_blur = 22 [default = false];
+  optional uint32 min_kernel_size = 23 [default = 0];
+  optional uint32 max_kernel_size = 24 [default = 0];
+  optional float min_sigma_x = 25 [default = 0];
+  optional float max_sigma_x = 26 [default = 0];
+  optional float min_sigma_y = 27 [default = 0];
+  optional float max_sigma_y = 28 [default = 0];
+  optional float blur_probability = 29 [default = 0.5];
+
+  // This parameter is actually only used by the ImageLabelDataIndex layer. But for ease of use, they both use the same ImageLabelDataParameter
+  optional bool filename_to_idx= 30 [default = true];
+
+  optional uint32 num_channels = 31 [default = 1];
+
+  optional uint32 label_space = 32 [default = 21];
+
+  optional string box_dir = 33 [default = ""];
+  optional string box_extension = 34 [default = ".detections"];
+
+  // Whether we randomly perturb the bounding boxes. If set to true, we will scale the original
+  // bounding box by an amount within +/- box_perturb_max_scale_percent% of its height and width independently. 
+  // The centre of the bounding box will be unchanged in this step. Next, we carry out a random
+  // translation by an amount within +/- box_perturb_max_translate_percent% of its height and width 
+  // independently.
+  optional bool random_box_perturb = 35 [default = false];
+  optional float box_perturb_max_scale_percent = 36 [default = 0];
+  optional float box_perturb_max_translate_percent = 37 [default = 0];
+
+  // Whether dets file names are in 5-digit index format.
+  optional bool filename_in_idx = 38 [default = false];
+
+  // This parameter is used to initialise the detections blob, and subsequently the network.
+  // Set it to the largest number of dets in the dataset to avoid memory fragmentation.
+  optional uint32 init_num_dets = 39 [default = 1];
+
+  // This parameter controls the maximum number of detections allowed by the layer. 
+  // It skips images with more detections to prevent out of memory errors.
+  // Default value is -1, which disables this behaviour.
+  optional int32 max_num_dets_allowed = 40 [default = -1];
+
+  // This parameter controls the behaviour of layer's classification ground truth generation from semantic label map.
+  // Setting this flag to true makes the layer's classification ground truth ignore label 0 in the semantic label map.
+  // If true, the length of the generated ground truth vector will be (label_space - 1). Otherwise, it will be label_space.
+  // Generally, for example, this flag should be true for Pascal VOC, and false for Cityscapes.
+  optional bool ignore_first_channel_for_classification = 41 [default = true];
+
+  // This parameter controls the behaviour of layer's classification ground truth generation from semantic label map.
+  // Setting this flag to true makes the layer generate the classification GT from the original semantic label map, 
+  // instead of the transformed semantic label map.
+  optional bool make_transform_independent_classification_gt = 42 [default = false];
+}
+
+
+//
+// Messages from MNC
+//
+message ROIWarpingTestParameter {
+  // Pad, kernel size, and stride are all given as a single value for equal
+  // dimensions in height and width or as Y, X pairs.
+  optional uint32 pooled_h = 1 [default = 0]; // The pooled output height
+  optional uint32 pooled_w = 2 [default = 0]; // The pooled output width
+  // Multiplicative spatial scale factor to translate ROI coords from their
+  // input scale to the scale used when pooling
+  optional float spatial_scale = 3 [default = 1];
+}
+message ROIWarpingParameter {
+  // Pad, kernel size, and stride are all given as a single value for equal
+  // dimensions in height and width or as Y, X pairs.
+  optional uint32 pooled_h = 1 [default = 0]; // The pooled output height
+  optional uint32 pooled_w = 2 [default = 0]; // The pooled output width
+  // Multiplicative spatial scale factor to translate ROI coords from their
+  // input scale to the scale used when pooling
+  optional float spatial_scale = 3 [default = 1];
+}
+
+message MaskResizeParameter {
+  optional uint32 output_height = 1 [default = 0];
+  optional uint32 output_width = 2 [default = 0];
 }

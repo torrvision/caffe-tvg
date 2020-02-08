@@ -1,6 +1,8 @@
 #include <algorithm>
 #include <cfloat>
 #include <vector>
+#include <numeric>
+#include <algorithm>
 
 #include "caffe/layers/softmax_loss_layer.hpp"
 #include "caffe/util/math_functions.hpp"
@@ -33,6 +35,14 @@ void SoftmaxWithLossLayer<Dtype>::LayerSetUp(
   } else {
     normalization_ = this->layer_param_.loss_param().normalization();
   }
+
+  has_probability_thresh_ = this->layer_param().loss_param().has_probability_thresh();
+  probability_thresh_ = (Dtype) this->layer_param().loss_param().probability_threshold();
+
+  use_ohem_ = this->layer_param().loss_param().use_ohem();
+  if (use_ohem_) {
+    ohem_n_ = this->layer_param().loss_param().ohem_n();
+  }
 }
 
 template <typename Dtype>
@@ -49,6 +59,8 @@ void SoftmaxWithLossLayer<Dtype>::Reshape(
       << "e.g., if softmax axis == 1 and prediction shape is (N, C, H, W), "
       << "label count (number of labels) must be N*H*W, "
       << "with integer values in {0, 1, ..., C-1}.";
+  ohem_n_ = std::min(ohem_n_, outer_num_ * inner_num_);
+  temp.ReshapeLike(*bottom[1]);
   if (top.size() >= 2) {
     // softmax output
     top[1]->ReshapeLike(*bottom[0]);
@@ -85,6 +97,31 @@ Dtype SoftmaxWithLossLayer<Dtype>::get_normalizer(
   return std::max(Dtype(1.0), normalizer);
 }
 
+// sort_index takes in a vector values, and returns a vector indices
+// ranks[i] would be the ranking of values[i] in descending order
+
+template <typename Dtype>
+struct SoftmaxWithLossLayer<Dtype>::IdxCompare{
+    const Dtype* target;
+    IdxCompare(const Blob<Dtype>& data): target(data.cpu_data()) {}
+    bool operator()(int a, int b) const { return target[a] > target[b]; } // > to rank in descending order
+};
+
+template <typename Dtype>
+void SoftmaxWithLossLayer<Dtype>::RankOfValues(
+      const Blob<Dtype>& values, Blob<Dtype>& ranks){
+    Blob<Dtype> indices(values.shape());
+    for (int k = 0; k < indices.count(); k++){
+        indices.mutable_cpu_data()[k] = k;
+    }
+    std::sort(indices.mutable_cpu_data(), indices.mutable_cpu_data()+indices.count(),
+       IdxCompare(values));
+    Dtype* ranks_data = ranks.mutable_cpu_data();
+    for (int k = 0; k < values.count(); k++){
+        ranks_data[static_cast<int>(indices.cpu_data()[k])] = k;
+    }
+}
+
 template <typename Dtype>
 void SoftmaxWithLossLayer<Dtype>::Forward_cpu(
     const vector<Blob<Dtype>*>& bottom, const vector<Blob<Dtype>*>& top) {
@@ -95,16 +132,45 @@ void SoftmaxWithLossLayer<Dtype>::Forward_cpu(
   int dim = prob_.count() / outer_num_;
   int count = 0;
   Dtype loss = 0;
+  // do a pre-loop to get the descending ranking of -log(prob_data) which ranges from 0 to inf
+  if (use_ohem_) {
+    Dtype* temp_data = temp.mutable_cpu_data();
+    for (int i = 0; i < outer_num_; ++i) {
+      for (int j = 0; j < inner_num_; j++) {
+        const int label_val = static_cast<int>(label[i * inner_num_ + j]);
+        Dtype pred_prob = prob_data[i * dim + label_val * inner_num_ + j];
+        if ((has_ignore_label_ && label_val == ignore_label_) || 
+            (has_probability_thresh_ && pred_prob > probability_thresh_)){
+          temp_data[i * inner_num_ + j] = 0;
+        } else {
+          temp_data[i * inner_num_ + j] = -log(std::max(pred_prob, Dtype(FLT_MIN)));
+        }
+      }
+    }
+    RankOfValues(temp, temp); // temp now holds descending ranking of -log(prob_data)
+    // if temp.cpu_data()[i*inner_num_ + j] < ohem_n_, then prob_data[i * dim + label_value * inner_num_ + j] contributes to loss
+    // otherwise, prob_data[i * dim + label_value * inner_num_ + j] does not contribute to loss
+  }
+
   for (int i = 0; i < outer_num_; ++i) {
     for (int j = 0; j < inner_num_; j++) {
       const int label_value = static_cast<int>(label[i * inner_num_ + j]);
       if (has_ignore_label_ && label_value == ignore_label_) {
         continue;
       }
+      // if OHEM, then if temp[i*inner_num_ + j] >= ohem_n_, continue to the next iteration
+      if (use_ohem_ && temp.cpu_data()[i*inner_num_ + j] >= ohem_n_) {
+        continue;
+      }
+
+      Dtype predicted_prob = prob_data[i * dim + label_value * inner_num_ + j];
+      if (has_probability_thresh_ && predicted_prob > probability_thresh_){
+        continue;
+      }
+
       DCHECK_GE(label_value, 0);
       DCHECK_LT(label_value, prob_.shape(softmax_axis_));
-      loss -= log(std::max(prob_data[i * dim + label_value * inner_num_ + j],
-                           Dtype(FLT_MIN)));
+      loss -= log( std::max(predicted_prob, Dtype(FLT_MIN) ) );
       ++count;
     }
   }
@@ -131,7 +197,15 @@ void SoftmaxWithLossLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
     for (int i = 0; i < outer_num_; ++i) {
       for (int j = 0; j < inner_num_; ++j) {
         const int label_value = static_cast<int>(label[i * inner_num_ + j]);
-        if (has_ignore_label_ && label_value == ignore_label_) {
+
+        Dtype prob_value = 0;
+        if (has_probability_thresh_ && label_value != ignore_label_){
+          prob_value = prob_data[i * dim + label_value * inner_num_ + j];
+        }
+
+        if ( (has_ignore_label_ && label_value == ignore_label_) ||
+             (has_probability_thresh_ && prob_value > probability_thresh_) ||
+             (use_ohem_ && temp.cpu_data()[i*inner_num_ + j] >= ohem_n_ )) {
           for (int c = 0; c < bottom[0]->shape(softmax_axis_); ++c) {
             bottom_diff[i * dim + c * inner_num_ + j] = 0;
           }

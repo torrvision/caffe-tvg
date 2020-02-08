@@ -1,0 +1,16 @@
+data/label/aachen_000000_000019_1.png
+data/label/aachen_000000_000019_2.png
+data/label/aachen_000000_000019_3.png
+data/label/aachen_000000_000019_4.png
+data/label/aachen_000000_000019_5.png
+data/label/aachen_000000_000019_6.png
+data/label/aachen_000000_000019_7.png
+data/label/aachen_000000_000019_8.png
+data/label/aachen_000000_000019_9.png
+data/label/aachen_000000_000019_10.png
+data/label/aachen_000000_000019_11.png
+data/label/aachen_000000_000019_12.png
+data/label/aachen_000000_000019_13.png
+data/label/aachen_000000_000019_14.png
+data/label/aachen_000000_000019_15.png
+data/label/aachen_000001_000019_1.png

@@ -1,0 +1,60 @@
+layer {
+  name: "data"
+  type: "ImageLabelData"
+  top: "data"
+  top: "label"
+  transform_param {
+    mirror: true
+    crop_size: 500
+    mean_value: 0 #102.93
+    mean_value: 0 #111.36
+    mean_value: 0 #116.52
+  }
+  image_label_data_param {
+    image_list_path: "image.txt"
+    label_list_path: "label.txt"
+    batch_size: 1
+
+    # Shuffle images every epoch
+    shuffle: true
+
+    # The size of the labels
+    # Change stride and offset if you want to downsample the label
+    # This is useful when you don't have an upsampling layer in your training network
+    label_slice {
+      dim: 500
+      dim: 500
+      stride: 1
+      stride: 1
+      offset: 0
+      offset: 0
+    }
+    padding: REFLECT # You can choose either reflection padding or zero padding ("REFLECT" or "ZERO")
+    pad_centre: false # true: pad from the centre of the image, false: from top corner like in FCN
+
+    #hsv colour jittering
+    hsv_noise: true
+    h_noise: 30
+    s_noise: 30
+    v_noise: 30
+
+    #To try different scales
+    rand_scale: true
+    min_scale: 0.7
+    max_scale: 1.3
+
+    # Do different rotation
+    random_rotate: true;
+    max_rotation_angle: 10;
+    min_rotation_angle: -10;
+
+    # Maybe you want to add a Gaussian blur to the image as well
+    random_gaussian_blur: true;
+    min_kernel_size: 2;
+    max_kernel_size: 40;
+    min_sigma_x: 2;
+    max_sigma_x: 40;
+    min_sigma_y: 2;
+    max_sigma_y: 40;
+  }
+}

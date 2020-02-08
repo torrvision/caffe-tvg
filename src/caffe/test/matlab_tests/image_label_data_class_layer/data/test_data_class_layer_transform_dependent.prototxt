@@ -1,0 +1,54 @@
+layer {
+  name: "data"
+  type: "ImageLabelDataClass"
+  top: "data"
+  top: "label"
+  top: "classlabel"
+  transform_param {
+    mirror: true
+    crop_size: 225
+    #mean_value: 104.008
+    #mean_value: 116.669
+    #mean_value: 122.675
+    mean_value: 0
+    mean_value: 0
+    mean_value: 0
+  }
+  image_label_data_param {
+    image_list_path: "data/list_rgb_test_data_class_layer.txt"
+    label_list_path: "data/list_label_test_data_class_layer.txt"
+    batch_size: 16
+    shuffle: false
+    rand_scale: true
+    min_scale: 2
+    max_scale: 0.5
+    label_slice {
+      dim: 225
+      dim: 225
+      stride: 1
+      stride: 1
+      offset: 0
+      offset: 0
+    }
+    padding: REFLECT
+    hsv_noise: true
+    h_noise: 30
+    s_noise: 30
+    v_noise: 30
+    pad_centre: true
+    random_rotate: true
+    max_rotation_angle: 10
+    min_rotation_angle: -10
+    random_gaussian_blur: true
+    min_kernel_size: 5
+    max_kernel_size: 5
+    min_sigma_x: 0.5
+    max_sigma_x: 1.0
+    min_sigma_y: 0.5
+    max_sigma_y: 1.0
+    blur_probability: 0.5
+    label_space: 19
+    ignore_first_channel_for_classification: false
+    make_transform_independent_classification_gt: false
+  }
+}

@@ -98,11 +98,45 @@ void caffe_copy(const int N, const Dtype* X, Dtype* Y) {
   }
 }
 
+/*
+* Y is the desination
+* X is the source
+*/
+template <typename Dtype>
+void caffe_cpu_copy(const int N, const Dtype* X, Dtype* Y) {
+    if (X != Y) {
+        memcpy(Y, X, sizeof(Dtype) * N);  // NOLINT(caffe/alt_fn)
+    }
+}
+
+template <typename Dtype>
+void caffe_gpu_copy(const int N, const Dtype* X, Dtype* Y) {
+    #ifndef CPU_ONLY
+    if (X != Y) {
+        // NOLINT_NEXT_LINE(caffe/alt_fn)
+        CUDA_CHECK(cudaMemcpy(Y, X, sizeof(Dtype) * N, cudaMemcpyDefault));
+    }
+    #endif
+}
+
 template void caffe_copy<int>(const int N, const int* X, int* Y);
 template void caffe_copy<unsigned int>(const int N, const unsigned int* X,
     unsigned int* Y);
 template void caffe_copy<float>(const int N, const float* X, float* Y);
 template void caffe_copy<double>(const int N, const double* X, double* Y);
+
+template void caffe_cpu_copy<int>(const int N, const int* X, int* Y);
+template void caffe_cpu_copy<unsigned int>(const int N, const unsigned int* X,
+                                       unsigned int* Y);
+template void caffe_cpu_copy<float>(const int N, const float* X, float* Y);
+template void caffe_cpu_copy<double>(const int N, const double* X, double* Y);
+
+template void caffe_gpu_copy<int>(const int N, const int* X, int* Y);
+template void caffe_gpu_copy<unsigned int>(const int N, const unsigned int* X,
+                                           unsigned int* Y);
+template void caffe_gpu_copy<float>(const int N, const float* X, float* Y);
+template void caffe_gpu_copy<double>(const int N, const double* X, double* Y);
+
 
 template <>
 void caffe_scal<float>(const int N, const float alpha, float *X) {

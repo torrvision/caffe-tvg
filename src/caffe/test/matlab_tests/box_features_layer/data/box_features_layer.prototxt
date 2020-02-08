@@ -1,0 +1,40 @@
+force_backward: true
+layer {
+  name: "unary"
+  type: "Input"
+  top: "unary"
+  input_param {
+    shape {
+      dim: 1
+      dim: 512
+      dim: 66
+      dim: 66
+    }
+  }
+}
+layer {
+  name: "detections"
+  type: "Input"
+  top: "detections"
+  input_param {
+    shape {
+      dim: 1
+      dim: 30
+      dim: 1
+      dim: 6
+    }
+  }
+}
+layer {
+  name: "box_features"
+  type: "BoxFeatures"
+  bottom: "unary"
+  bottom: "detections"
+  top: "box_features"
+  box_term_param {
+    detection_box_input_dir: ""
+    detection_pixel_input_dir: ""
+    is_background_det: true
+    background_det_score: 1
+  }
+}

@@ -323,6 +323,273 @@ void DataTransformer<Dtype>::Transform(const cv::Mat& cv_img,
     }
   }
 }
+
+
+template<typename Dtype>
+void DataTransformer<Dtype>::Transform(const cv::Mat& cv_img,
+                                       const cv::Mat& cv_label,
+                                       Blob<Dtype>* transformed_image,
+                                       Blob<Dtype>* transformed_label,
+                                       Blob<Dtype>* detection_blob) {
+  const int crop_size = param_.crop_size();
+  const int img_channels = cv_img.channels();
+  const int img_height = cv_img.rows;
+  const int img_width = cv_img.cols;
+
+  // Check dimensions.
+  const int channels = transformed_image->channels();
+  const int height = transformed_image->height();
+  const int width = transformed_image->width();
+  const int num = transformed_image->num();
+
+  CHECK_EQ(channels, img_channels);
+  CHECK_LE(height, img_height);
+  CHECK_LE(width, img_width);
+  CHECK_GE(num, 1);
+
+
+  CHECK(cv_img.depth() == CV_8U || cv_img.depth() == CV_32F)
+  << "Image data type must be unsigned byte or float";
+  CHECK(cv_label.type() == CV_8U || cv_label.type() == CV_8UC3)
+  << "Label data type must be unsigned byte with single or three channels"
+  << "Current label type is " << cv_label.type();
+
+  const Dtype scale = param_.scale();
+  const bool do_mirror = param_.mirror() && Rand(2);
+  const bool has_mean_file = param_.has_mean_file();
+  const bool has_mean_values = mean_values_.size() > 0;
+
+  CHECK_GT(img_channels, 0);
+  CHECK_GE(img_height, crop_size);
+  CHECK_GE(img_width, crop_size);
+
+  Dtype *mean = NULL;
+  if (has_mean_file) {
+    CHECK_EQ(img_channels, data_mean_.channels());
+    CHECK_EQ(img_height, data_mean_.height());
+    CHECK_EQ(img_width, data_mean_.width());
+    mean = data_mean_.mutable_cpu_data();
+  }
+  if (has_mean_values) {
+    CHECK(mean_values_.size() == 1 || mean_values_.size() == img_channels) <<
+                                                                           "Specify either 1 mean_value or as many as channels: "
+                                                                           << img_channels;
+    if (img_channels > 1 && mean_values_.size() == 1) {
+      // Replicate the mean_value for simplicity
+      for (int c = 1; c < img_channels; ++c) {
+        mean_values_.push_back(mean_values_[0]);
+      }
+    }
+  }
+
+  int h_off = 0;
+  int w_off = 0;
+  cv::Mat cv_cropped_img = cv_img;
+  cv::Mat cv_cropped_label = cv_label;
+  if (crop_size) {
+    CHECK_EQ(crop_size, height);
+    CHECK_EQ(crop_size, width);
+    // We only do random crop when we do training.
+    if (phase_ == TRAIN) {
+      h_off = Rand(img_height - crop_size + 1);
+      w_off = Rand(img_width - crop_size + 1);
+    } else {
+      h_off = (img_height - crop_size) / 2;
+      w_off = (img_width - crop_size) / 2;
+    }
+    cv::Rect roi(w_off, h_off, crop_size, crop_size);
+    cv_cropped_img = cv_img(roi);
+    cv_cropped_label = cv_label(roi);
+  } else {
+    CHECK_EQ(img_height, height);
+    CHECK_EQ(img_width, width);
+  }
+
+  CHECK(cv_cropped_img.data);
+  CHECK(cv_cropped_label.data);
+
+  Dtype *transformed_data = transformed_image->mutable_cpu_data();
+  // Dtype *transformed_data = (*t_img)[0];
+
+  if (cv_cropped_img.depth() == CV_8U) {
+    cv_cropped_img.convertTo(cv_cropped_img, CV_32F);
+  }
+
+  int top_index;
+  for (int h = 0; h < height; ++h) {
+    const float *ptr = cv_cropped_img.ptr<float>(h);
+    int img_index = 0;
+    for (int w = 0; w < width; ++w) {
+      for (int c = 0; c < img_channels; ++c) {
+        if (do_mirror) {
+          top_index = (c * height + h) * width + (width - 1 - w);
+        } else {
+          top_index = (c * height + h) * width + w;
+        }
+        // int top_index = (c * height + h) * width + w;
+        Dtype pixel = static_cast<Dtype>(ptr[img_index++]);
+        if (has_mean_file) {
+          int mean_index = (c * img_height + h_off + h) * img_width + w_off + w;
+          transformed_data[top_index] =
+                  (pixel - mean[mean_index]) * scale;
+        } else {
+          if (has_mean_values) {
+            transformed_data[top_index] =
+                    (pixel - mean_values_[c]) * scale;
+          } else {
+            transformed_data[top_index] = pixel * scale;
+          }
+        }
+      }
+    }
+  }
+
+  Dtype *transformed_label_data = transformed_label->mutable_cpu_data();
+  int label_channels = transformed_label->channels();
+  // Dtype* transformed_label_data = (*t_label)[0];
+
+  for (int h = 0; h < height; ++h) {
+    const uchar *ptr = cv_cropped_label.ptr<uchar>(h);
+    int label_index = 0;
+    for (int w = 0; w < width; ++w) {
+      for (int c = 0; c < label_channels; ++c) {
+        if (do_mirror) {
+          top_index = (c * height + h) * width + (width - 1 - w);
+        } else {
+          top_index = (c * height + h) * width + w;
+        }
+        // int top_index = (c * height + h) * width + w;
+        Dtype pixel = static_cast<Dtype>(ptr[label_index++]);
+        transformed_label_data[top_index] = pixel;
+      }
+    }
+  }
+
+  // Transform the detections according to the applied transformation
+  // We have to account for mirroring, and cropping
+  if (detection_blob != NULL) {
+
+    // Cropping. Some detections may disappear from the image, and should be removed.
+    if (crop_size) {
+      //if (w_off > 0 || h_off > 0) {
+      Dtype *detection_data = detection_blob->mutable_cpu_data();
+      int step = detection_blob->width();
+      int write_index = 0;
+      int written_dets = 0;
+      int label_mapping[detection_blob->count(0,2) + 1]; // N (batch_size) times C (number of dets) + 1 background (label 0)
+      label_mapping[0] = 0; // background label is unchanged
+      int next_available_instance_id = 1;
+      const int invalid_detection_mode = this->param_.invalid_detection_mode();
+      // Create a std::set with the cropped label data
+      // There seems to be a few pixels of disagreement between the transformed label map and the transformed detection coords
+      // Sometimes an ins_id is present in cropped label, but the corresponding detection says the whole instance is out of sight
+      // Sometimes it's the opposite: ins_id is not actually present but detection coords suggest it's still in the cropped window
+      // This leads to problems, and makes it necessary to check detections against the IDs present in the cropped label.
+      std::set<Dtype> present_unique_labels(transformed_label_data, transformed_label_data + transformed_label->count());
+      for (int read_index = 0; read_index < detection_blob->count(); read_index += step) {
+
+        const int det_label = detection_data[read_index];
+        int x_start = std::max(detection_data[read_index + 1] - w_off, Dtype(0));
+        int y_start = std::max(detection_data[read_index + 2] - h_off, Dtype(0));
+        int x_end = std::max(detection_data[read_index + 3] - w_off, Dtype(0));
+        int y_end = std::max(detection_data[read_index + 4] - h_off, Dtype(0));
+        Dtype det_score = detection_data[read_index + 5];
+
+        x_start = std::min(x_start, width - 1);
+        y_start = std::min(y_start, height - 1);
+        x_end = std::min(x_end, width - 1);
+        y_end = std::min(y_end, height - 1);
+
+        //const bool remove_det = (x_start == Dtype(0) && y_start == Dtype(0) && x_end == Dtype(0) && y_end == Dtype(0));
+        bool invalid_detection = (x_start == 0 && x_end == 0) ||
+                                 (y_start == 0 && y_end == 0) ||
+                                 (x_start >= width - 1) || (y_start >= height - 1) ||
+                                 (x_start == x_end) || (y_start == y_end);
+
+        const bool label_is_present = (present_unique_labels.count(Dtype(read_index / step + 1)) > 0);
+
+        if (phase_ == TRAIN) {
+          invalid_detection = !label_is_present;
+        }
+
+        if (invalid_detection) {
+          label_mapping[read_index / step + 1] = -1;
+        } else {
+          label_mapping[read_index / step + 1] = next_available_instance_id;
+          next_available_instance_id++;
+        }
+
+        if (invalid_detection && (invalid_detection_mode == TransformationParameter_InvalidDetectionMode_ZERO_OUT)){
+          det_score = 0;
+        }
+
+        if (!invalid_detection || (invalid_detection_mode == TransformationParameter_InvalidDetectionMode_ZERO_OUT) ) {
+          detection_data[write_index] = det_label;
+          detection_data[write_index + 1] = x_start;
+          detection_data[write_index + 2] = y_start;
+          detection_data[write_index + 3] = x_end;
+          detection_data[write_index + 4] = y_end;
+          detection_data[write_index + 5] = det_score;
+
+          write_index += step;
+          written_dets += 1;
+        } else {
+            if (invalid_detection_mode == TransformationParameter_InvalidDetectionMode_REMOVE){
+              // LOG(INFO) << "Skipping detection " << read_index / step; // Too verbose
+            } else{
+              LOG(FATAL) << "Unknown option of what to do for invalid detections as a result of image transformations.";
+            }
+        }
+      } // for (int read_index = 0; read_index < detection_blob->count(); read_index += step)
+
+      if (written_dets != detection_blob->channels() || detection_blob->channels() == 0) {
+        
+        const int n = detection_blob->num();
+        const int c = std::max(written_dets, 1); // set chn to 1 if zero detection after transformation
+        const int h = detection_blob->height();
+        const int w = detection_blob->width();
+        detection_blob->Reshape(n, c, h, w);
+        if (written_dets == 0){
+          detection_data[0] = -1; // signals zero detection
+        }
+
+        // Also remap the ground truth label map to remove invalid instance ids (if invalid_mode is REMOVE and phase is TRAIN)
+        if (invalid_detection_mode == TransformationParameter_InvalidDetectionMode_REMOVE && phase_ == TRAIN) {
+          for (int i = 0; i < transformed_label->count(); i++) {
+            int cur_id = static_cast<int>(transformed_label_data[i]);
+            if (cur_id == 255) {
+              // Do not remap IGNORE label
+              continue;
+            }
+            int new_id = label_mapping[cur_id];
+            CHECK_GE(new_id, 0); // ids present in the label map should not be invalid
+            transformed_label_data[i] = new_id;
+          }
+        }
+
+      } // if (written_dets != detection_blob->channels() || detection_blob->channels() == 0)
+      //} // if w_off > 0 or h_off > 0
+    } // if crop_size
+
+    // Mirroring
+    if (do_mirror) {
+      Dtype *detection_data = detection_blob->mutable_cpu_data();
+      int step = detection_blob->width();
+      for (int read_index = 0; read_index < detection_blob->count(); read_index += step) {
+        int x_start = detection_data[read_index + 1];
+        int x_end = detection_data[read_index + 3];
+
+        int x_start_final = Mirror(x_end, width);
+        x_end = Mirror(x_start, width);
+
+        detection_data[read_index + 1] = x_start_final;
+        detection_data[read_index + 3] = x_end;
+      }
+    } // mirroring
+  } // if (detection_blob != NULL)
+}
+
+
 #endif  // USE_OPENCV
 
 template<typename Dtype>

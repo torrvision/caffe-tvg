@@ -14,6 +14,13 @@ set(CAFFE_TARGET_VERSION "1.0.0-rc3" CACHE STRING "Caffe logical version")
 set(CAFFE_TARGET_SOVERSION "1.0.0-rc3" CACHE STRING "Caffe soname version")
 add_definitions(-DCAFFE_VERSION=${CAFFE_TARGET_VERSION})
 
+#--- Set old CUDA version
+#set(CUDA_TOOLKIT_ROOT_DIR "/usr/local/cuda-6.5")
+#set(CUDA_ARCH_NAME "Maxwell")
+
+# ---[ For C++ 11
+add_compile_options(-std=c++11)
+
 # ---[ Using cmake scripts and modules
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/Modules)
 

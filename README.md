@@ -1,37 +1,33 @@
-# Caffe
+# Caffe TVG Segmentation
 
-[![Build Status](https://travis-ci.org/BVLC/caffe.svg?branch=master)](https://travis-ci.org/BVLC/caffe)
-[![License](https://img.shields.io/badge/license-BSD-blue.svg)](LICENSE)
+This fork of [Caffe](https://github.com/BVLC/caffe) supports the various projects on semantic-, instance- and panoptic-segmentation done by the [Torr Vision Group](http://www.robots.ox.ac.uk/~tvg/).
 
-Caffe is a deep learning framework made with expression, speed, and modularity in mind.
-It is developed by the Berkeley Vision and Learning Center ([BVLC](http://bvlc.eecs.berkeley.edu)) and community contributors.
+These include:
 
-Check out the [project site](http://caffe.berkeleyvision.org) for all the details like
+- [Conditional Random Fields as Recurrent Neural Networks](https://github.com/torrvision/crfasrnn), ICCV 2015.
 
-- [DIY Deep Learning for Vision with Caffe](https://docs.google.com/presentation/d/1UeKXVgRvvxg9OUdh_UiC5G71UMscNPlvArsWER41PsU/edit#slide=id.p)
-- [Tutorial Documentation](http://caffe.berkeleyvision.org/tutorial/)
-- [BVLC reference models](http://caffe.berkeleyvision.org/model_zoo.html) and the [community model zoo](https://github.com/BVLC/caffe/wiki/Model-Zoo)
-- [Installation instructions](http://caffe.berkeleyvision.org/installation.html)
+- [Higher Order Conditional Random Fields in Deep Neural Networks](http://www.robots.ox.ac.uk/~aarnab/projects/eccv_2016/Higher_Order_CRF_CNN.pdf), ECCV 2016.
 
-and step-by-step examples.
+- [Bottom-up Instance Segmentation with Deep Higher-Order CRFs](http://www.robots.ox.ac.uk/~aarnab/projects/bmvc_2016/InstanceSegmentation.pdf), BMVC 2016.
 
-[![Join the chat at https://gitter.im/BVLC/caffe](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/BVLC/caffe?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+- [Pixelwise Instance Segmentation with a Dynamically Instantiated Network](https://github.com/hmph/dynamically-instantiated-network), CVPR 2017.
 
-Please join the [caffe-users group](https://groups.google.com/forum/#!forum/caffe-users) or [gitter chat](https://gitter.im/BVLC/caffe) to ask questions and talk about methods and models.
-Framework development discussions and thorough bug reports are collected on [Issues](https://github.com/BVLC/caffe/issues).
+- [Holistic, Instance-Level Human Parsing](http://www.robots.ox.ac.uk/~aarnab/projects/bmvc_2016/InstanceSegmentation.pdf), BMVC 2017.
 
-Happy brewing!
+- [On the Robustness of Semantic Segmentation Models to Adversarial Attacks](http://www.robots.ox.ac.uk/~aarnab/adversarial_robustness.html), CVPR 2018, PAMI 2020.
 
-## License and Citation
+- [Weakly- and Semi-Supervised Panoptic Segmentation](https://github.com/qizhuli/Weakly-Supervised-Panoptic-Segmentation). ECCV 2018.
 
-Caffe is released under the [BSD 2-Clause license](https://github.com/BVLC/caffe/blob/master/LICENSE).
-The BVLC reference models are released for unrestricted use.
+Note that this code base has been refactored and modified since the original papers were written.
 
-Please cite Caffe in your publications if it helps your research:
+## Installation
 
-    @article{jia2014caffe,
-      Author = {Jia, Yangqing and Shelhamer, Evan and Donahue, Jeff and Karayev, Sergey and Long, Jonathan and Girshick, Ross and Guadarrama, Sergio and Darrell, Trevor},
-      Journal = {arXiv preprint arXiv:1408.5093},
-      Title = {Caffe: Convolutional Architecture for Fast Feature Embedding},
-      Year = {2014}
-    }
+Follow the standard guide for installing [Caffe](README_caffe.md).
+
+## Credits
+
+In addition to the original [Caffe](https://github.com/BVLC/caffe), this repository contains layers from [Fast-RCNN](https://github.com/rbgirshick/caffe-fast-rcnn/tree/bcd9b4eadc7d8fbc433aeefd564e82ec63aaf69c), [R-FCN](https://github.com/daijifeng001/caffe-rfcn/tree/4bcfcd104bb0b9f0862e127c71bd845ddf036f14), [Dilated Convolutions](https://github.com/fyu/caffe), [Deeplab](https://bitbucket.org/aquariusjay/deeplab-public-ver2/src/master/), [PSPNet](https://github.com/hszhao/PSPNet), [MNC](https://github.com/daijifeng001/caffe-mnc/tree/d8bf82b7dae8e48e098d3316860c4a86f847b1e6) and [Intel Caffe](https://github.com/intel/caffe).
+
+## Contact
+
+For any queries, please contact Anurag Arnab (aarnab@robots.ox.ac.uk). Pull requests are also welcome.

@@ -37,7 +37,11 @@ class GradientChecker {
   }
   void CheckGradientExhaustive(Layer<Dtype>* layer,
       const vector<Blob<Dtype>*>& bottom, const vector<Blob<Dtype>*>& top,
-      int check_bottom = -1);
+      int check_bottom = -1, bool verbose = false);
+
+  void CheckGradientExhaustiveReverse(Layer<Dtype>* layer,
+      const vector<Blob<Dtype>*>& bottom, const vector<Blob<Dtype>*>& top,
+      int check_bottom = -1, bool verbose = false);
 
   // CheckGradientEltwise can be used to test layers that perform element-wise
   // computation only (e.g., neuron layers) -- where (d y_i) / (d x_j) = 0 when
@@ -75,6 +79,7 @@ template <typename Dtype>
 void GradientChecker<Dtype>::CheckGradientSingle(Layer<Dtype>* layer,
     const vector<Blob<Dtype>*>& bottom, const vector<Blob<Dtype>*>& top,
     int check_bottom, int top_id, int top_data_id, bool element_wise) {
+
   if (element_wise) {
     CHECK_EQ(0, layer->blobs().size());
     CHECK_LE(0, top_id);
@@ -172,16 +177,34 @@ void GradientChecker<Dtype>::CheckGradientSingle(Layer<Dtype>* layer,
         Dtype scale = std::max<Dtype>(
             std::max(fabs(computed_gradient), fabs(estimated_gradient)),
             Dtype(1.));
+
+        int CHW_ = current_blob->num_axes()>=1? current_blob->count(1) : 1;
+        int HW_ = current_blob->num_axes()>=2? current_blob->count(2) : 1;
+        int W_ = current_blob->num_axes()>=3? current_blob->count(3) : 1;
+        int n_index = feat_id / CHW_;
+        int c_index = ( feat_id - (n_index * CHW_) ) / HW_;
+        int h_index = ( feat_id - (n_index * CHW_) - (c_index * HW_) ) / W_;
+        int w_index = feat_id % W_;
+
         EXPECT_NEAR(computed_gradient, estimated_gradient, threshold_ * scale)
           << "debug: (top_id, top_data_id, blob_id, feat_id)="
           << top_id << "," << top_data_id << "," << blob_id << "," << feat_id
           << "; feat = " << feature
           << "; objective+ = " << positive_objective
-          << "; objective- = " << negative_objective;
+          << "; objective- = " << negative_objective
+          << "\n(n,c,h,w) (" << n_index << ", "
+          << c_index << ", "
+          << h_index << ", "
+          << w_index << ")";
       }
       // LOG(ERROR) << "Feature: " << current_blob->cpu_data()[feat_id];
       // LOG(ERROR) << "computed gradient: " << computed_gradient
       //    << " estimated_gradient: " << estimated_gradient;
+
+      /*if (feat_id == 0){
+        printf("Blob id: %d. Max Blob id: %d. Feat id: %d. Max Feat id: %d \n", blob_id, (int) blobs_to_check.size(), feat_id, current_blob->count());
+      }*/
+
     }
   }
 }
@@ -189,8 +212,10 @@ void GradientChecker<Dtype>::CheckGradientSingle(Layer<Dtype>* layer,
 template <typename Dtype>
 void GradientChecker<Dtype>::CheckGradientExhaustive(Layer<Dtype>* layer,
     const vector<Blob<Dtype>*>& bottom, const vector<Blob<Dtype>*>& top,
-    int check_bottom) {
+    int check_bottom, bool verbose) {
+
   layer->SetUp(bottom, top);
+
   CHECK_GT(top.size(), 0) << "Exhaustive mode requires at least one top blob.";
   // LOG(ERROR) << "Exhaustive Mode.";
   for (int i = 0; i < top.size(); ++i) {
@@ -198,6 +223,49 @@ void GradientChecker<Dtype>::CheckGradientExhaustive(Layer<Dtype>* layer,
     for (int j = 0; j < top[i]->count(); ++j) {
       // LOG(ERROR) << "Exhaustive: blob " << i << " data " << j;
       CheckGradientSingle(layer, bottom, top, check_bottom, i, j);
+      if (verbose){
+        //LOG(INFO) << "top[" << i << "]. Checked gradient of element [" << j << "] wrt to all inputs. " << j << "/" << top[i]->count() << "\n";
+        std::cout << "top[" << i << "]. Checked gradient of element [" << j << "] wrt to all inputs. " << j << "/" << top[i]->count() << std::endl;
+      }
+    }
+  }
+}
+
+
+template <typename Dtype>
+void GradientChecker<Dtype>::CheckGradientExhaustiveReverse(Layer<Dtype>* layer,
+                                                     const vector<Blob<Dtype>*>& bottom, const vector<Blob<Dtype>*>& top,
+                                                     int check_bottom, bool verbose) {
+
+  layer->SetUp(bottom, top);
+
+  CHECK_GT(top.size(), 0) << "Exhaustive mode requires at least one top blob.";
+  // LOG(ERROR) << "Exhaustive Mode.";
+  for (int i = top.size() - 1; i >= 0; --i) {
+    // LOG(ERROR) << "Exhaustive: blob " << i << " size " << top[i]->count();
+    for (int j = top[i]->count() - 1; j >= 0; --j) {
+      // LOG(ERROR) << "Exhaustive: blob " << i << " data " << j;
+      CheckGradientSingle(layer, bottom, top, check_bottom, i, j);
+      if (verbose){
+        //LOG(INFO) << "top[" << i << "]. Checked gradient of element [" << j << "] wrt to all inputs. " << j << "/" << top[i]->count() << "\n";
+
+        Blob<Dtype>* current_blob = top[i];
+        int CHW_ = current_blob->num_axes()>=1? current_blob->count(1) : 1;
+        int HW_ = current_blob->num_axes()>=2? current_blob->count(2) : 1;
+        int W_ = current_blob->num_axes()>=3? current_blob->count(3) : 1;
+        int n_index = j / CHW_;
+        int c_index = ( j - (n_index * CHW_) ) / HW_;
+        int h_index = ( j - (n_index * CHW_) - (c_index * HW_) ) / W_;
+        int w_index = j % W_;
+
+        std::cout << "top[" << i << "]. Checked gradient of element [" << j << "] wrt to all inputs. " << j << "/" << top[i]->count()
+        << ". (n, c, h, w) = "
+        << "(" << n_index << ", "
+        << c_index << ", "
+        << h_index << ", "
+        << w_index << ") "
+        << std::endl;
+      }
     }
   }
 }

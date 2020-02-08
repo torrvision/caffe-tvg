@@ -246,6 +246,10 @@ int test() {
     LOG(INFO) << "Use CPU.";
     Caffe::set_mode(Caffe::CPU);
   }
+
+  // Set the number of total iterations.
+  Caffe::set_max_iter(FLAGS_iterations);
+
   // Instantiate the caffe net.
   Net<float> caffe_net(FLAGS_model, caffe::TEST);
   caffe_net.CopyTrainedLayersFrom(FLAGS_weights);
@@ -255,6 +259,7 @@ int test() {
   vector<float> test_score;
   float loss = 0;
   for (int i = 0; i < FLAGS_iterations; ++i) {
+    Caffe::set_cur_iter(i);
     float iter_loss;
     const vector<Blob<float>*>& result =
         caffe_net.Forward(&iter_loss);
@@ -312,6 +317,8 @@ int time() {
     LOG(INFO) << "Use CPU.";
     Caffe::set_mode(Caffe::CPU);
   }
+  // Set the number of total iterations.
+  Caffe::set_max_iter(FLAGS_iterations);
   // Instantiate the caffe net.
   Net<float> caffe_net(FLAGS_model, caffe::TRAIN);
 
@@ -343,6 +350,7 @@ int time() {
   double forward_time = 0.0;
   double backward_time = 0.0;
   for (int j = 0; j < FLAGS_iterations; ++j) {
+    Caffe::set_cur_iter(j);
     Timer iter_timer;
     iter_timer.Start();
     forward_timer.Start();

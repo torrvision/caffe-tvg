@@ -1,0 +1,61 @@
+layer {
+  name: "data"
+  type: "ImageLabelDataIndexDet"
+  top: "data"
+  top: "label"
+  top: "data_index"
+  top: "detections"
+  transform_param {
+    mirror: true
+    crop_size: 713
+    #mean_value: 104.008
+    #mean_value: 116.669
+    #mean_value: 122.675
+    mean_value: 0
+    mean_value: 0
+    mean_value: 0
+    invalid_detection_mode: REMOVE
+  }
+  image_label_data_param {
+    image_list_path: "data/rgb.txt"
+    label_list_path: "data/label.txt"
+    batch_size: 1
+    shuffle: false
+    rand_scale: true
+    min_scale: 0.5
+    max_scale: 2
+    label_slice {
+      dim: 713
+      dim: 713
+      stride: 1
+      stride: 1
+      offset: 0
+      offset: 0
+    }
+    padding: ZERO
+    hsv_noise: true
+    h_noise: 10
+    s_noise: 30
+    v_noise: 30
+    pad_centre: true
+    random_rotate: true
+    max_rotation_angle: 10
+    min_rotation_angle: -10
+    random_gaussian_blur: true
+    min_kernel_size: 5
+    max_kernel_size: 5
+    min_sigma_x: 0.5
+    max_sigma_x: 1.0
+    min_sigma_y: 0.5
+    max_sigma_y: 1.0
+    blur_probability: 0.5
+    random_box_perturb: true
+    box_perturb_max_scale_percent: 5
+    box_perturb_max_translate_percent: 5
+    box_dir: "data/bboxes/"
+    filename_in_idx: false
+    box_extension: ".bbox"
+    init_num_dets: 30
+    max_num_dets_allowed: 30
+  }
+}

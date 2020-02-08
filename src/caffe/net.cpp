@@ -28,11 +28,20 @@ Net<Dtype>::Net(const NetParameter& param, const Net* root_net)
 }
 
 template <typename Dtype>
-Net<Dtype>::Net(const string& param_file, Phase phase, const Net* root_net)
+Net<Dtype>::Net(const string& param_file, Phase phase,
+    const int level, const vector<string>* stages,
+    const Net* root_net)
     : root_net_(root_net) {
   NetParameter param;
   ReadNetParamsFromTextFileOrDie(param_file, &param);
+  // Set phase, stages and level
   param.mutable_state()->set_phase(phase);
+  if (stages != NULL) {
+    for (int i = 0; i < stages->size(); i++) {
+      param.mutable_state()->add_stage((*stages)[i]);
+    }
+  }
+  param.mutable_state()->set_level(level);
   Init(param);
 }
 
@@ -272,6 +281,16 @@ void Net<Dtype>::Init(const NetParameter& in_param) {
   ShareWeights();
   debug_info_ = param.debug_info();
   LOG_IF(INFO, Caffe::root_solver()) << "Network initialization done.";
+}
+
+template <typename Dtype>
+void Net<Dtype>::SetPhase(Phase phase) {
+  // set all layers
+  for (int i = 0; i < layers_.size(); ++i) {
+    layers_[i]->set_phase(phase);
+  }
+  // set net phase
+  phase_ = phase;
 }
 
 template <typename Dtype>

@@ -122,7 +122,16 @@ class SoftmaxWithLossLayer : public LossLayer<Dtype> {
   /// How to normalize the output loss.
   LossParameter_NormalizationMode normalization_;
 
+  bool has_probability_thresh_;
+  Dtype probability_thresh_;
+
   int softmax_axis_, outer_num_, inner_num_;
+
+  bool use_ohem_;
+  int ohem_n_;
+  Blob<Dtype> temp;
+  virtual void RankOfValues(const Blob<Dtype>& values, Blob<Dtype>& ranks);
+  struct IdxCompare;
 };
 
 }  // namespace caffe
